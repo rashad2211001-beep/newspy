@@ -1,17 +1,15 @@
 package com.newspy.app;
 
-import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
-import android.telephony.TelephonyManager;
+import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import org.json.JSONObject;
-import java.io.*;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.UUID;
@@ -38,17 +36,14 @@ public class MainActivity extends AppCompatActivity {
         ll.addView(log);
 
         Button b1 = new Button(this);
-        b1.setText("🚀 رفع الجهاز");
-        b1.setOnClickListener(v -> testUpload());
+        b1.setText("1) رفع الجهاز");
+        b1.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) { upload(); }
+        });
         ll.addView(b1);
 
-        Button b2 = new Button(this);
-        b2.setText("📋 رفع كامل");
-        b2.setOnClickListener(v -> fullUpload());
-        ll.addView(b2);
-
         setContentView(sv);
-        append("جاهز");
     }
 
     private String getDeviceId() {
@@ -60,64 +55,38 @@ public class MainActivity extends AppCompatActivity {
         return id;
     }
 
-    private void append(String s) {
-        runOnUiThread(() -> log.append("\n" + s));
+    private void append(final String s) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() { log.append("\n" + s); }
+        });
     }
 
-    private void testUpload() {
-        new Thread(() -> {
-            try {
-                JSONObject o = new JSONObject();
-                o.put("device_id", getDeviceId());
-                o.put("model", Build.MODEL);
-                o.put("manufacturer", Build.MANUFACTURER);
-                o.put("android_version", Build.VERSION.RELEASE);
-                o.put("status", "online");
-
-                boolean ok = post("devices", o);
-                append(ok ? "✅ نجح: تم الرفع" : "❌ فشل الرفع");
-            } catch (Exception e) {
-                append("❌ " + e.getMessage());
-            }
-        }).start();
-    }
-
-    private void fullUpload() {
-        new Thread(() -> {
-            try {
-                // حذف القديم
-                delete("devices?device_id=eq." + getDeviceId());
-
-                JSONObject o = new JSONObject();
-                o.put("device_id", getDeviceId());
-                o.put("model", Build.MODEL);
-                o.put("manufacturer", Build.MANUFACTURER);
-                o.put("android_version", Build.VERSION.RELEASE);
-                o.put("status", "online");
-
-                // battery
+    private void upload() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
                 try {
-                    android.os.BatteryManager bm = (android.os.BatteryManager) getSystemService(Context.BATTERY_SERVICE);
-                    o.put("battery", bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY));
-                } catch (Exception e) {}
+                    JSONObject o = new JSONObject();
+                    o.put("device_id", getDeviceId());
+                    o.put("model", Build.MODEL);
+                    o.put("manufacturer", Build.MANUFACTURER);
+                    o.put("android_version", Build.VERSION.RELEASE);
+                    o.put("status", "online");
 
-                // phone number
-                try {
-                    TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-                    o.put("phone_number", tm.getLine1Number() == null ? "-" : tm.getLine1Number());
-                } catch (Exception e) {}
-
-                boolean ok = post("devices", o);
-                append(ok ? "✅ تم الرفع الكامل" : "❌ فشل");
-            } catch (Exception e) {
-                append("❌ " + e.getMessage());
+                    boolean ok = post("devices", o);
+                    append(ok ? "OK: uploaded" : "FAILED");
+                } catch (Exception e) {
+                    append("ERR: " + e.toString());
+                }
             }
         }).start();
     }
 
     private boolean post(String table, JSONObject data) {
         try {
-            HttpURLConnection c = (HttpURLConnection) new URL(SB_URL + "/rest/v1/" + table).openConnection();
+            URL url = new URL(SB_URL + "/rest/v1/" + table);
+            HttpURLConnection c = (HttpURLConnection) url.openConnection();
             c.setRequestMethod("POST");
             c.setRequestProperty("apikey", SB_KEY);
             c.setRequestProperty("Authorization", "Bearer " + SB_KEY);
@@ -130,21 +99,8 @@ public class MainActivity extends AppCompatActivity {
             append("HTTP: " + code);
             return code < 400;
         } catch (Exception e) {
-            append("POST err: " + e.getMessage());
+            append("POST err: " + e.toString());
             return false;
-        }
-    }
-
-    private void delete(String q) {
-        try {
-            HttpURLConnection c = (HttpURLConnection) new URL(SB_URL + "/rest/v1/" + q).openConnection();
-            c.setRequestMethod("DELETE");
-            c.setRequestProperty("apikey", SB_KEY);
-            c.setRequestProperty("Authorization", "Bearer " + SB_KEY);
-            int code = c.getResponseCode();
-            append("DELETE: " + code);
-        } catch (Exception e) {
-            append("DEL err: " + e.getMessage());
         }
     }
 }
